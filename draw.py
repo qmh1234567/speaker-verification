@@ -4,59 +4,164 @@ import constants as c
 from sklearn import metrics
 import matplotlib.pyplot as plt
 
-def evaluate_metrics(y_true, y_pres):
-    plt.figure()
-    aucs= [] 
-    for y_pre in y_pres:
-        fpr, tpr, thresholds = metrics.roc_curve(y_true, y_pre, pos_label=1)
-        auc = metrics.auc(fpr, tpr)
-        plt.plot(fpr, tpr,label='AUC')
-        aucs.append(round(auc,4))
 
-    # plt.plot(np.arange(1, 0, -0.01), np.arange(0, 1, 0.01))
-    plt.legend([f'seresnet,auc={aucs[0]}',f'seresnet-nodrop,auc={aucs[1]}',
-    f'seresnet-nose,auc={aucs[2]}',f'seresnet-nol2,auc={aucs[3]}',f'seresnet-noELU,auc={aucs[4]}'])
-    plt.xlim([0, 1])
-    plt.ylim([0, 1])
-    plt.xlabel('false positive rate (fpr)')
-    plt.ylabel('true positive rate (tpr)')
-    plt.title(f'ROC-AUC curve')
+def evaluate_metrics(b_y_true,b_y_pre):
+
+    b_fpr,b_tpr,p_thresholds = metrics.roc_curve(b_y_true,b_y_pre,pos_label=1)
+    b_frr = 1-b_tpr
+    b_far = b_fpr
+
+
+    # print(p_far.shape)
+    print(b_far.shape)
+    # length = min(len(p_far),len(b_far))
+    # p_far = p_far[:length]
+    # p_frr = p_frr[:length]
+
+    # b_far = b_far[:length]
+    # b_frr = b_frr[:length]
+    fig ,axes = plt.subplots()
+    axes.set_xscale('log')  
+    axes.set_yscale('log')  
+
+    # plt.plot(p_far*100,p_frr*100,color = 'red',label = 'proposed model')
+    axes.plot(b_far*100,b_frr*100,color = 'green',label = 'baseline model')
+    # axes.set_xticks([0.1,0.5,1,2,5,10,20,40,60])
+    # axes.set_yticks([0.01,0.1,0.5,1,2,5,10,20,40,60])
+    # set(axes,'xtick',[0.1,0.5,1,2,5,10,20,40,60])
+    axes.set_xlim(0.01, 60)
+    axes.set_ylim(0.1, 60)
+
+    # # plt.plot(np.arange(0,100,1),np.arange(0,100,1))
+
+    # plt.legend(fontsize=12)
+    # plt.xlabel('False Alarm probability(in %)', fontsize=12)
+    # plt.ylabel('Miss probability', fontsize=12)
+    # plt.xticks([0.1,0.5,1,2,5,10,20,40,60])
+    # plt.yticks([0.01,0.1,0.5,1,2,5,10,20,40,60])
+    # plt.xlim([0.01,60])
+    # plt.ylim([0.1,60])
+
+    # plt.title(f'ROC curve, AUC score={auc}')
     plt.show()
 
-    threshold_index = np.argmin(abs(1-tpr - fpr))
+
+
+# peo 说话人名字, datum 测试数据分数
+def comput_far_frr(datum):
+    up = np.max(datum)
+    down = np.min(datum)
+
+    print("up=",up)
+    print("down",down)
+    print(len(datum))
+
+    pos_num = 18860
+
+    far = []
+    frr = []
+    threshods = []
+
+    dot_num = 1000  # DET图上的数据点数
+    step = (up - down) / (dot_num + 1)
+    print("step=",step)
+
+    threshod = up
+    size = len(datum)
+    for i in range(dot_num):
+        threshod -= step
+        false_neg = 0
+        false_pos = 0
+        for d in range(size):
+            if d < pos_num and datum[d] < threshod:
+                false_pos += 1
+            elif d > pos_num and datum[d] > threshod:
+                false_neg += 1
+
+        threshods.append(threshod)
+        far.append(false_pos / size)
+        frr.append(false_neg / size)
+
+    far = np.array(far)
+    frr = np.array(frr)
+    threshods = np.array(threshods)
+    return far,frr,threshods
+
+
+def draw_DET(far,frr):
+
+    # fig = plt.figure()
+
+    plt.plot(far*100,frr*100,color = 'red',label = 'proposed model')
+    # plt.plot(far*100,frr*100,color = 'green',label = 'baseline model')
+    plt.plot(np.arange(0,60,1),np.arange(0,60,1))
+
+    plt.legend(fontsize=12)
+    plt.xlabel('False Alarm probability(in %)', fontsize=12)
+    plt.ylabel('Miss probability', fontsize=12)
+    # plt.xlim([0.01,15])
+    # plt.ylim([0.01,15])
+    plt.show()
+
+def compute_min_DCF(thresholds,FAR,FRR):
+    P_tar_2 = 0.01
+    P_tar_3 = 0.001
+
+    C_frr = C_far = 1
+
+    min_DCF_2 = min_DCF_3 = 100
+    # 每次选取一个不同的threshold，我们就可以得到一组FPR和TPR，即ROC曲线上的一点。
+    for index in range(len(thresholds)):
+        
+        # if FRR[index] >0 and FAR[index] > 0:
+        DCF_2 = C_frr*FRR[index]*100*P_tar_2 + C_far*FAR[index]*100*(1-P_tar_2)
+
+        DCF_3 = C_frr*FRR[index]*100*P_tar_3 + C_far*FAR[index]*100*(1-P_tar_3)
+
+        if DCF_2 < min_DCF_2 :
+            min_DCF_2 = DCF_2
+        if DCF_3 < min_DCF_3 :
+            min_DCF_3 = DCF_3
+
+    print("min_DCF_2=",min_DCF_2)
+    print("min_DCF_3=",min_DCF_3)
+
+
+    # 计算eer
+    threshold_index = np.argmin(abs(FRR - FAR))  # 平衡点
     threshold = thresholds[threshold_index]
-    eer = ((1-tpr)[threshold_index]+fpr[threshold_index])/2
-    print(eer)
-    auc_score = metrics.roc_auc_score(y_true, y_pre, average='macro')
+    print(FRR[threshold_index])
+    print(FAR[threshold_index])
+    eer = (FRR[threshold_index]+FAR[threshold_index])/2
 
-    y_pro = [1 if x > threshold else 0 for x in y_pre]
-    acc = metrics.accuracy_score(y_true, y_pro)
-    prauc = metrics.average_precision_score(y_true, y_pro, average='macro')
-    return y_pro, eer, prauc, acc, auc_score
-
-
-def speaker_verification(distances, ismember_true):
-    distance_maxs = []
-    for distance in distances:
-        print(type(distance))
-        score_index = distance.argmax(axis=0)
-        distance_max = distance.max(axis=0)
-        distance_max = (distance_max + 1) / 2
-        distance_maxs.append(distance_max)
-    y_pro, eer, prauc, acc, auc_score = evaluate_metrics(
-            ismember_true, distance_maxs)
-
-    print(f'eer={eer}\t prauc={prauc} \t acc={acc}\t auc_score={auc_score}\t')
-    return y_pro
+    print("eer=",eer)
 
 
 if __name__ == "__main__":
-    distance = np.load('./npys/perfect.npy')
-    distance_nodrp = np.load('./npys/perfect_nodrop.npy')
-    distance_nose = np.load('./npys/perfect_nose.npy')
-    distance_nol2 = np.load('./npys/perfect_nol2.npy')
-    distance_noELU = np.load('./npys/perfect_noELU.npy')
-    distances = (distance,distance_nodrp,distance_nose,distance_nol2,distance_noELU)
-    df = pd.read_csv(c.ANNONATION_FILE)
-    ismember_true = list(map(int,df["Ismember"]))
-    ismember_pre = speaker_verification(distances, ismember_true)
+
+
+    p_far = np.load('./dataset/p_far.npy')
+    p_frr = np.load('./dataset/p_frr.npy')
+
+    b_far = np.load('./dataset/b_far_big.npy')
+    b_frr = np.load('./dataset/b_frr_big.npy')
+
+    y_true = np.load('./dataset/y_true.npy')
+    b_y_pre = np.load('./dataset/y_pre.npy')
+
+
+    # evaluate_metrics(y_true,b_y_pre)
+
+    exit()
+    # evaluate_metrics(p_far,p_frr,b_far,b_frr)
+
+    y_pre = np.load('./dataset/y_pre.npy')
+    far,frr,thresholds = comput_far_frr(y_pre)
+
+    print(thresholds.shape)
+    print(far.shape)
+    draw_DET(far,frr)
+
+    compute_min_DCF(thresholds,far,frr)
+
+
